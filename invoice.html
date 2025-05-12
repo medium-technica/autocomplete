@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Excel Autocomplete</title>
+  <style>
+    /* Basic styles for suggestions */
+    #suggestions {
+      border: 1px solid #ccc;
+      max-height: 150px;
+      overflow-y: auto;
+      position: absolute;
+      background: white;
+      width: 200px;
+    }
+    .suggestion {
+      padding: 8px;
+      cursor: pointer;
+    }
+    .suggestion:hover {
+      background: #f0f0f0;
+    }
+  </style>
+</head>
+<body>
+
+  <h3>Upload Excel File</h3>
+  <input type="file" id="excelFile" accept=".xlsx" />
+  
+  <h3>Type to Search</h3>
+  <input type="text" id="searchInput" autocomplete="off" />
+  <div id="suggestions"></div>
+
+  <!-- SheetJS library -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <script>
+    let itemsList = [];
+
+    // Load Excel file
+    document.getElementById('excelFile').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+
+      reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+        // Assuming values are in first column
+        itemsList = rows.map(row => row[0]).filter(Boolean);
+        console.log("Loaded items:", itemsList);
+      };
+
+      reader.readAsArrayBuffer(file);
+    });
+
+    // Autocomplete functionality
+    const input = document.getElementById('searchInput');
+    const suggestionsBox = document.getElementById('suggestions');
+
+    input.addEventListener('input', function() {
+      const query = this.value.toLowerCase();
+      suggestionsBox.innerHTML = '';
+
+      if (query.length === 0) return;
+
+      const filtered = itemsList.filter(item => item.toLowerCase().includes(query));
+
+      filtered.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'suggestion';
+        div.textContent = item;
+        div.addEventListener('click', () => {
+          input.value = item;
+          suggestionsBox.innerHTML = '';
+        });
+        suggestionsBox.appendChild(div);
+      });
+    });
+
+    // Hide suggestions when clicking outside
+    document.addEventListener('click', function(e) {
+      if (!suggestionsBox.contains(e.target) && e.target !== input) {
+        suggestionsBox.innerHTML = '';
+      }
+    });
+  </script>
+
+</body>
+</html>
