@@ -105,7 +105,7 @@
     }
 
     .search-box {
-      display: none;
+      display: block;
     }
 
     .search-box.show {
@@ -151,6 +151,17 @@
 
     #searchInput:focus {
       border-color: #007bff;
+    }
+
+    #searchInput:disabled {
+      background-color: #f5f5f5;
+      color: #999;
+      cursor: not-allowed;
+    }
+
+    .reload-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     .suggestions-box {
@@ -201,7 +212,7 @@
     }
 
     .button-group {
-      display: flex;
+      display: none;
       gap: 8px;
       margin-top: 15px;
     }
@@ -226,9 +237,9 @@
 <body>
 
   <div class="container">
-    <div class="label">Upload items list CSV</div>
+    <div class="label" id="mainLabel">Search Items</div>
     
-    <div class="header" id="header">
+    <div class="header" id="header" style="display: none;">
       <button class="upload-btn" id="uploadBtn">💾</button>
       <input type="file" id="csvFile" accept=".csv" />
       <div class="file-info">
@@ -243,7 +254,7 @@
       <button class="small-btn" id="loadBtn" title="Load from local storage">📂 Load</button>
     </div>
 
-    <div class="search-box" id="searchSection">
+    <div class="search-box" id="searchSection" class="show">
       <div class="search-header">
         <input 
           type="text" 
@@ -360,8 +371,17 @@
           return;
         }
 
+        // Auto-save to localStorage
+        try {
+          localStorage.setItem('csvItems', JSON.stringify(itemsData));
+          localStorage.setItem('csvFileName', fileName);
+        } catch (error) {
+          console.error('Error saving to storage:', error);
+        }
+
         showStatus(`Loaded ${itemsData.length} items`, 'success');
-        searchSection.classList.add('show');
+        searchInput.disabled = false;
+        reloadBtn.disabled = false;
         searchInput.focus();
         updateUI();
       } catch (error) {
@@ -409,7 +429,7 @@
       }
     });
 
-    // Reload data - resets to upload screen
+    // Reload data - opens file upload dialog
     reloadBtn.addEventListener('click', () => {
       itemsData = [];
       fileName = '';
@@ -419,11 +439,10 @@
       searchInput.value = '';
       suggestionsBox.innerHTML = '';
       suggestionsBox.classList.remove('show');
-      searchSection.classList.remove('show');
-      header.style.display = 'flex';
-      buttonGroup.style.display = 'flex';
-      updateUI();
-      showStatus('Ready to upload new data', 'info');
+      localStorage.removeItem('csvItems');
+      localStorage.removeItem('csvFileName');
+      searchSection.classList.add('show');
+      csvFile.click();
     });
 
     // Show save button after data is loaded
@@ -582,23 +601,31 @@
         const saved = localStorage.getItem('csvItems');
         const savedFileName = localStorage.getItem('csvFileName');
 
-        if (!saved) return;
+        // Hide upload section and buttons always
+        header.style.display = 'none';
+        buttonGroup.style.display = 'none';
+
+        if (!saved) {
+          // No data - disable search but keep visible
+          searchInput.disabled = true;
+          reloadBtn.disabled = true;
+          return;
+        }
 
         itemsData = JSON.parse(saved);
         fileName = savedFileName || 'loaded-items.csv';
         fileNameDisplay.textContent = fileName;
         fileNameDisplay.classList.add('show');
 
-        // Hide upload section
-        header.style.display = 'none';
-        buttonGroup.style.display = 'none';
-
-        showStatus(`Loaded ${itemsData.length} items from storage`, 'success');
-        searchSection.classList.add('show');
+        // Enable search
+        searchInput.disabled = false;
+        reloadBtn.disabled = false;
         searchInput.focus();
         updateUI();
       } catch (error) {
         showStatus('Error loading from storage: ' + error.message, 'error');
+        searchInput.disabled = true;
+        reloadBtn.disabled = true;
       }
     }
   </script>
