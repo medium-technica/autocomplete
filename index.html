@@ -1,91 +1,441 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
-  <title>Excel Autocomplete</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Item Search</title>
   <style>
-    /* Basic styles for suggestions */
-    #suggestions {
-      border: 1px solid #ccc;
-      max-height: 150px;
-      overflow-y: auto;
-      position: absolute;
-      background: white;
-      width: 200px;
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
     }
-    .suggestion {
-      padding: 8px;
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 400px;
+      margin: 0 auto;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .upload-btn {
+      background: #007bff;
+      border: none;
+      width: 48px;
+      height: 48px;
+      border-radius: 6px;
       cursor: pointer;
+      font-size: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      flex-shrink: 0;
     }
-    .suggestion:hover {
-      background: #f0f0f0;
+
+    .upload-btn:hover {
+      background: #0056b3;
+      transform: scale(1.05);
+    }
+
+    #csvFile {
+      display: none;
+    }
+
+    .file-info {
+      flex: 1;
+    }
+
+    .file-name {
+      font-size: 13px;
+      color: #666;
+      display: none;
+    }
+
+    .file-name.show {
+      display: block;
+    }
+
+    .status-message {
+      padding: 10px 12px;
+      border-radius: 4px;
+      margin-bottom: 15px;
+      display: none;
+      font-size: 13px;
+    }
+
+    .status-message.show {
+      display: block;
+    }
+
+    .status-message.success {
+      background-color: #d4edda;
+      color: #155724;
+    }
+
+    .status-message.error {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+
+    .status-message.info {
+      background-color: #d1ecf1;
+      color: #0c5460;
+    }
+
+    .search-box {
+      display: none;
+    }
+
+    .search-box.show {
+      display: block;
+    }
+
+    #searchInput {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    #searchInput:focus {
+      border-color: #007bff;
+    }
+
+    .suggestions-box {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      max-height: 280px;
+      overflow-y: auto;
+      background: white;
+      margin-top: 6px;
+      display: none;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    }
+
+    .suggestions-box.show {
+      display: block;
+    }
+
+    .suggestion-item {
+      padding: 10px 12px;
+      border-bottom: 1px solid #f0f0f0;
+      cursor: pointer;
+      transition: background-color 0.15s;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .suggestion-item:last-child {
+      border-bottom: none;
+    }
+
+    .suggestion-item:hover {
+      background-color: #f8f9fa;
+    }
+
+    .suggestion-name {
+      flex: 1;
+      color: #333;
+    }
+
+    .suggestion-price {
+      color: #007bff;
+      font-weight: 600;
+      margin-left: 10px;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+
+    .no-results {
+      padding: 12px;
+      text-align: center;
+      color: #999;
+      font-size: 13px;
     }
   </style>
 </head>
+
 <body>
 
-  <h3>Upload Excel File</h3>
-  <input type="file" id="excelFile" accept=".xlsx" />
-  
-  <h3>Type to Search</h3>
-  <input type="text" id="searchInput" autocomplete="off" />
-  <div id="suggestions"></div>
+  <div class="container">
+    <div class="header">
+      <button class="upload-btn" id="uploadBtn">📁</button>
+      <input type="file" id="csvFile" accept=".csv" />
+      <div class="file-info">
+        <div class="file-name" id="fileName"></div>
+      </div>
+    </div>
 
-  <!-- SheetJS library -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <div class="status-message" id="statusMessage"></div>
+
+    <div class="search-box" id="searchSection">
+      <input 
+        type="text" 
+        id="searchInput" 
+        placeholder="Search items..." 
+        autocomplete="off"
+      />
+      <div id="suggestions" class="suggestions-box"></div>
+    </div>
+  </div>
 
   <script>
-    let itemsList = [];
+    let csvData = null;
+    let itemsData = [];
+    let fileName = '';
 
-    // Load Excel file
-    document.getElementById('excelFile').addEventListener('change', function(e) {
-      const file = e.target.files[0];
-      const reader = new FileReader();
+    const uploadBtn = document.getElementById('uploadBtn');
+    const csvFile = document.getElementById('csvFile');
+    const fileNameDisplay = document.getElementById('fileName');
+    const searchSection = document.getElementById('searchSection');
+    const searchInput = document.getElementById('searchInput');
+    const suggestionsBox = document.getElementById('suggestions');
+    const statusMessage = document.getElementById('statusMessage');
 
-      reader.onload = function(e) {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-
-        // Assuming values are in first column
-        itemsList = rows.map(row => row[0]).filter(Boolean);
-        console.log("Loaded items:", itemsList);
-      };
-
-      reader.readAsArrayBuffer(file);
+    // Click to upload
+    uploadBtn.addEventListener('click', () => {
+      csvFile.click();
     });
 
-    // Autocomplete functionality
-    const input = document.getElementById('searchInput');
-    const suggestionsBox = document.getElementById('suggestions');
+    // File input change
+    csvFile.addEventListener('change', (e) => {
+      handleFiles(e.target.files);
+    });
 
-    input.addEventListener('input', function() {
-      const query = this.value.toLowerCase();
+    function handleFiles(files) {
+      if (files.length === 0) return;
+
+      const file = files[0];
+
+      if (!file.name.endsWith('.csv')) {
+        showStatus('Please upload a valid CSV file', 'error');
+        return;
+      }
+
+      fileName = file.name;
+      fileNameDisplay.textContent = file.name;
+      fileNameDisplay.classList.add('show');
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        csvData = e.target.result;
+        parseCSVData(csvData);
+      };
+      reader.onerror = () => {
+        showStatus('Error reading file', 'error');
+      };
+      reader.readAsText(file);
+    }
+
+    function parseCSVData(csvText) {
+      try {
+        const lines = csvText.trim().split('\n');
+
+        if (lines.length < 2) {
+          showStatus('CSV file must have headers and at least one data row', 'error');
+          return;
+        }
+
+        const header = parseCSVLine(lines[0]);
+
+        if (header.length === 0) {
+          showStatus('Invalid CSV header', 'error');
+          return;
+        }
+
+        const nameIndex = findColumnIndex(header, ['name', 'item', 'product', 'title', 'description']);
+        const priceIndex = findColumnIndex(header, ['price', 'cost', 'amount', 'value']);
+
+        if (nameIndex === -1) {
+          showStatus('CSV must contain a name/item/product column', 'error');
+          return;
+        }
+
+        if (priceIndex === -1) {
+          showStatus('CSV must contain a price/cost column', 'error');
+          return;
+        }
+
+        itemsData = [];
+        for (let i = 1; i < lines.length; i++) {
+          if (lines[i].trim() === '') continue;
+
+          const values = parseCSVLine(lines[i]);
+          const name = values[nameIndex]?.trim() || '';
+          const price = values[priceIndex]?.trim() || '';
+
+          if (name) {
+            itemsData.push({ name, price });
+          }
+        }
+
+        if (itemsData.length === 0) {
+          showStatus('No valid items found in CSV', 'error');
+          return;
+        }
+
+        showStatus(`Loaded ${itemsData.length} items`, 'success');
+        searchSection.classList.add('show');
+        searchInput.focus();
+      } catch (error) {
+        showStatus('Error parsing CSV: ' + error.message, 'error');
+      }
+    }
+
+    function findColumnIndex(header, possibleNames) {
+      for (let i = 0; i < header.length; i++) {
+        const columnName = header[i].trim().toLowerCase();
+        for (const name of possibleNames) {
+          if (columnName.includes(name)) {
+            return i;
+          }
+        }
+      }
+      return -1;
+    }
+
+    searchInput.addEventListener('input', function () {
+      const query = this.value.toLowerCase().trim();
+
+      if (query.length === 0) {
+        suggestionsBox.innerHTML = '';
+        suggestionsBox.classList.remove('show');
+        return;
+      }
+
+      const queryParts = query.split(/\s+/).filter(part => part.length > 0);
+
+      const filtered = itemsData.filter(item => {
+        const itemNameLower = item.name.toLowerCase();
+        return queryParts.every(part => itemNameLower.includes(part));
+      });
+
+      filtered.sort((a, b) => {
+        const aNameLower = a.name.toLowerCase();
+        const bNameLower = b.name.toLowerCase();
+        
+        const aStarts = aNameLower.startsWith(queryParts[0]);
+        const bStarts = bNameLower.startsWith(queryParts[0]);
+        if (aStarts && !bStarts) return -1;
+        if (!aStarts && bStarts) return 1;
+        
+        const aMatchScore = countWordStarts(aNameLower, queryParts);
+        const bMatchScore = countWordStarts(bNameLower, queryParts);
+        return bMatchScore - aMatchScore;
+      });
+
+      const results = filtered.slice(0, 10);
+
+      if (results.length === 0) {
+        suggestionsBox.innerHTML = '<div class="no-results">No items found</div>';
+        suggestionsBox.classList.add('show');
+        return;
+      }
+
       suggestionsBox.innerHTML = '';
-
-      if (query.length === 0) return;
-
-      const filtered = itemsList.filter(item => item.toLowerCase().includes(query));
-
-      filtered.forEach(item => {
+      results.forEach((item) => {
         const div = document.createElement('div');
-        div.className = 'suggestion';
-        div.textContent = item;
+        div.className = 'suggestion-item';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'suggestion-name';
+        nameSpan.textContent = item.name;
+
+        const priceSpan = document.createElement('span');
+        priceSpan.className = 'suggestion-price';
+        priceSpan.textContent = item.price;
+
+        div.appendChild(nameSpan);
+        div.appendChild(priceSpan);
+
         div.addEventListener('click', () => {
-          input.value = item;
+          searchInput.value = item.name;
           suggestionsBox.innerHTML = '';
+          suggestionsBox.classList.remove('show');
+          showStatus(`Selected: ${item.name} - ${item.price}`, 'info');
         });
+
         suggestionsBox.appendChild(div);
       });
+
+      suggestionsBox.classList.add('show');
     });
 
-    // Hide suggestions when clicking outside
-    document.addEventListener('click', function(e) {
-      if (!suggestionsBox.contains(e.target) && e.target !== input) {
-        suggestionsBox.innerHTML = '';
+    document.addEventListener('click', function (e) {
+      if (!suggestionsBox.contains(e.target) && e.target !== searchInput) {
+        suggestionsBox.classList.remove('show');
       }
     });
+
+    function parseCSVLine(line) {
+      const result = [];
+      let current = '';
+      let insideQuotes = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        const nextChar = line[i + 1];
+
+        if (char === '"') {
+          if (insideQuotes && nextChar === '"') {
+            current += '"';
+            i++;
+          } else {
+            insideQuotes = !insideQuotes;
+          }
+        } else if (char === ',' && !insideQuotes) {
+          result.push(current);
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+
+      result.push(current);
+      return result;
+    }
+
+    function countWordStarts(text, queryParts) {
+      const words = text.split(/\s+/);
+      let matches = 0;
+      for (const part of queryParts) {
+        if (words.some(word => word.startsWith(part))) {
+          matches++;
+        }
+      }
+      return matches;
+    }
+
+    function showStatus(message, type) {
+      statusMessage.textContent = message;
+      statusMessage.className = `status-message show ${type}`;
+
+      if (type === 'success' || type === 'error') {
+        setTimeout(() => {
+          statusMessage.classList.remove('show');
+        }, 4000);
+      }
+    }
   </script>
 
 </body>
+
 </html>
