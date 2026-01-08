@@ -112,6 +112,33 @@
       display: block;
     }
 
+    .search-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      gap: 8px;
+    }
+
+    .reload-btn {
+      background: none;
+      border: 1px solid #ddd;
+      width: 32px;
+      height: 32px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .reload-btn:hover {
+      background: #f0f0f0;
+      border-color: #007bff;
+    }
+
     #searchInput {
       width: 100%;
       padding: 10px 12px;
@@ -173,11 +200,25 @@
       font-size: 12px;
     }
 
-    .no-results {
-      padding: 12px;
-      text-align: center;
-      color: #999;
-      font-size: 13px;
+    .button-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 15px;
+    }
+
+    .small-btn {
+      flex: 1;
+      padding: 8px 10px;
+      background: #e9ecef;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .small-btn:hover {
+      background: #dee2e6;
     }
   </style>
 </head>
@@ -187,8 +228,8 @@
   <div class="container">
     <div class="label">Upload items list CSV</div>
     
-    <div class="header">
-      <button class="upload-btn" id="uploadBtn">�</button>
+    <div class="header" id="header">
+      <button class="upload-btn" id="uploadBtn">💾</button>
       <input type="file" id="csvFile" accept=".csv" />
       <div class="file-info">
         <div class="file-name" id="fileName"></div>
@@ -197,13 +238,22 @@
 
     <div class="status-message" id="statusMessage"></div>
 
+    <div class="button-group" id="buttonGroup">
+      <button class="small-btn" id="saveBtn" style="display: none;" title="Save to local storage">💾 Save</button>
+      <button class="small-btn" id="loadBtn" title="Load from local storage">📂 Load</button>
+    </div>
+
     <div class="search-box" id="searchSection">
-      <input 
-        type="text" 
-        id="searchInput" 
-        placeholder="Search items..." 
-        autocomplete="off"
-      />
+      <div class="search-header">
+        <input 
+          type="text" 
+          id="searchInput" 
+          placeholder="Search items..." 
+          autocomplete="off"
+          style="flex: 1;"
+        />
+        <button class="reload-btn" id="reloadBtn" title="Reload data">🗄️</button>
+      </div>
       <div id="suggestions" class="suggestions-box"></div>
     </div>
   </div>
@@ -220,6 +270,13 @@
     const searchInput = document.getElementById('searchInput');
     const suggestionsBox = document.getElementById('suggestions');
     const statusMessage = document.getElementById('statusMessage');
+    const header = document.getElementById('header');
+    const buttonGroup = document.getElementById('buttonGroup');
+    const reloadBtn = document.getElementById('reloadBtn');
+
+    // Local storage buttons
+    const saveBtn = document.getElementById('saveBtn');
+    const loadBtn = document.getElementById('loadBtn');
 
     // Click to upload
     uploadBtn.addEventListener('click', () => {
@@ -306,8 +363,75 @@
         showStatus(`Loaded ${itemsData.length} items`, 'success');
         searchSection.classList.add('show');
         searchInput.focus();
+        updateUI();
       } catch (error) {
         showStatus('Error parsing CSV: ' + error.message, 'error');
+      }
+    }
+
+    // Save to localStorage
+    saveBtn.addEventListener('click', () => {
+      if (itemsData.length === 0) {
+        showStatus('No items to save', 'error');
+        return;
+      }
+
+      try {
+        localStorage.setItem('csvItems', JSON.stringify(itemsData));
+        localStorage.setItem('csvFileName', fileName);
+        showStatus('Saved to local storage', 'success');
+      } catch (error) {
+        showStatus('Error saving to storage: ' + error.message, 'error');
+      }
+    });
+
+    // Load from localStorage
+    loadBtn.addEventListener('click', () => {
+      try {
+        const saved = localStorage.getItem('csvItems');
+        const savedFileName = localStorage.getItem('csvFileName');
+
+        if (!saved) {
+          showStatus('No saved data in local storage', 'error');
+          return;
+        }
+
+        itemsData = JSON.parse(saved);
+        fileName = savedFileName || 'loaded-items.csv';
+        fileNameDisplay.textContent = fileName;
+        fileNameDisplay.classList.add('show');
+
+        showStatus(`Loaded ${itemsData.length} items from storage`, 'success');
+        searchSection.classList.add('show');
+        searchInput.focus();
+      } catch (error) {
+        showStatus('Error loading from storage: ' + error.message, 'error');
+      }
+    });
+
+    // Reload data - resets to upload screen
+    reloadBtn.addEventListener('click', () => {
+      itemsData = [];
+      fileName = '';
+      csvData = null;
+      fileNameDisplay.textContent = '';
+      fileNameDisplay.classList.remove('show');
+      searchInput.value = '';
+      suggestionsBox.innerHTML = '';
+      suggestionsBox.classList.remove('show');
+      searchSection.classList.remove('show');
+      header.style.display = 'flex';
+      buttonGroup.style.display = 'flex';
+      updateUI();
+      showStatus('Ready to upload new data', 'info');
+    });
+
+    // Show save button after data is loaded
+    function updateUI() {
+      if (itemsData.length > 0) {
+        saveBtn.style.display = 'block';
+      } else {
+        saveBtn.style.display = 'none';
       }
     }
 
@@ -443,6 +567,38 @@
         setTimeout(() => {
           statusMessage.classList.remove('show');
         }, 4000);
+      }
+    }
+
+    // Check if there's saved data on page load
+    window.addEventListener('load', () => {
+      if (localStorage.getItem('csvItems')) {
+        autoLoadData();
+      }
+    });
+
+    function autoLoadData() {
+      try {
+        const saved = localStorage.getItem('csvItems');
+        const savedFileName = localStorage.getItem('csvFileName');
+
+        if (!saved) return;
+
+        itemsData = JSON.parse(saved);
+        fileName = savedFileName || 'loaded-items.csv';
+        fileNameDisplay.textContent = fileName;
+        fileNameDisplay.classList.add('show');
+
+        // Hide upload section
+        header.style.display = 'none';
+        buttonGroup.style.display = 'none';
+
+        showStatus(`Loaded ${itemsData.length} items from storage`, 'success');
+        searchSection.classList.add('show');
+        searchInput.focus();
+        updateUI();
+      } catch (error) {
+        showStatus('Error loading from storage: ' + error.message, 'error');
       }
     }
   </script>
